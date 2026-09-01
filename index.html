@@ -1,1 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CleanVoice</title>
 
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f6f6f6;
+  color: #111;
+}
+
+.container {
+  max-width: 600px;
+  margin: auto;
+  padding: 24px 16px 50px;
+}
+
+.logo {
+  width: 58px;
+  height: 58px;
+  background: #111;
+  color: white;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin-bottom: 14px;
+}
+
+h1 {
+  font-size: 32px;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  color: #666;
+  font-size: 17px;
+  line-height: 1.5;
+  margin-bottom: 30px;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.label {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.upload {
+  border: 2px dashed #999;
+  border-radius: 20px;
+  padding: 35px 20px;
+  text-align: center;
+  background: white;
+  cursor: pointer;
+}
+
+.upload-icon {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.upload strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.upload span {
+  color: #777;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 17px;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  font-size: 16px;
+  outline: none;
+  background: white;
+}
+
+.formats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.format {
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  background: white;
+  padding: 18px 12px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.format.selected {
+  background: #111;
+  color: white;
+  border-color: #111;
+}
+
+.format b {
+  display: block;
+  font-size: 17px;
+  margin-bottom: 5px;
+}
+
+.format small {
+  opacity: .7;
+}
+
+.caption-box {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  padding: 17px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.switch {
+  width: 54px;
+  height: 30px;
+  background: #ddd;
+  border-radius: 30px;
+  position: relative;
+  cursor: pointer;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  top: 3px;
+  left: 3px;
+  transition: .2s;
+}
+
+.switch.on {
+  background: #111;
+}
+
+.switch.on::after {
+  left: 27px;
+}
+
+button {
+  width: 100%;
+  border: none;
+  border-radius: 17px;
+  padding: 18px;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.process {
+  background: #111;
+  color: white;
+}
+
+.process:disabled {
+  background: #ddd;
+  color: #888;
+}
+
+#previewArea {
+  display: none;
+  margin-top: 25px;
+}
+
+video {
+  width: 100%;
+  max-height: 500px;
+  border-radius: 18px;
+  background: #000;
+}
+
+.status {
+  margin-top: 18px;
+  background: white;
+  border-radius: 18px;
+  padding: 20px;
+  display: none;
+}
+
+.progress {
+  height: 8px;
+  background: #eee;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: #111;
+  transition: width .3s;
+}
+
+.download {
+  margin-top: 15px;
+  background: #111;
+  color: white;
+  text-decoration: none;
+  display: block;
+  text-align: center;
+  padding: 17px;
+  border-radius: 16px;
+  font-weight: bold;
+}
+
+.file-name {
+  margin-top: 12px;
+  color: #666;
+  word-break: break-word;
+}
+
+.note {
+  margin-top: 15px;
+  font-size: 13px;
+  color: #777;
+  line-height: 1.5;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="logo">▥</div>
+
+  <h1>CleanVoice</h1>
+
+  <div class="subtitle">
+    Clean your voice. Choose your format. Get your finished video.
+  </div>
+
+  <!-- UPLOAD -->
+  <div class="section">
+
+    <span class="label">1 · UPLOAD VIDEO</span>
+
+    <label class="upload" for="videoInput">
+
+      <div class="upload-icon">↑</div>
+
+      <strong>Tap to upload a video</strong>
+
+      <span>MP4, MOV, WebM</span>
+
+      <div id="fileName" class="file-name"></div>
+
+    </label>
+
+    <input
+      id="videoInput"
+      type="file"
+      accept="video/*"
+    >
+
+  </div>
+
+
+  <!-- TITLE -->
+  <div class="section">
+
+    <span class="label">2 · VIDEO TITLE</span>
+
+    <input
+      id="titleInput"
+      type="text"
+      placeholder="Give your video a name"
+    >
+
+  </div>
+
+
+  <!-- FORMAT -->
+  <div class="section">
+
+    <span class="label">3 · OUTPUT FORMAT</span>
+
+    <div class="formats">
+
+      <div class="format selected" data-ratio="16:9">
+        <b>YouTube</b>
+        <small>16:9</small>
+      </div>
+
+      <div class="format" data-ratio="9:16">
+        <b>YouTube Shorts</b>
+        <small>9:16</small>
+      </div>
+
+      <div class="format" data-ratio="9:16">
+        <b>Instagram</b>
+        <small>9:16</small>
+      </div>
+
+      <div class="format" data-ratio="16:9">
+        <b>Facebook</b>
+        <small>16:9</small>
+      </div>
+
+      <div class="format" data-ratio="9:16">
+        <b>TikTok</b>
+        <small>9:16</small>
+      </div>
+
+      <div class="format" data-ratio="1:1">
+        <b>Square</b>
+        <small>1:1</small>
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- CAPTIONS -->
+  <div class="section">
+
+    <span class="label">4 · CAPTIONS</span>
+
+    <div class="caption-box">
+
+      <div>
+        <b>Captions</b><br>
+        <small>Auto-generated subtitles</small>
+      </div>
+
+      <div id="captionSwitch" class="switch"></div>
+
+    </div>
+
+  </div>
+
+
+  <!-- PROCESS -->
+  <button id="processButton" class="process" disabled>
+    ✨ Process Video
+  </button>
+
+
+  <!-- STATUS -->
+  <div id="status" class="status">
+
+    <b id="statusText">Preparing...</b>
+
+    <div class="progress">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+
+  </div>
+
+
+  <!-- PREVIEW -->
+  <div id="previewArea">
+
+    <h2>Finished video</h2>
+
+    <video id="videoPreview" controls playsinline></video>
+
+    <a
+      id="downloadButton"
+      class="download"
+      download
+    >
+      ↓ Download video
+    </a>
+
+    <div class="note">
+      Prototype test: this version verifies the upload,
+      preview and download pipeline. AI voice enhancement,
+      captions and actual ratio rendering will be added next.
+    </div>
+
+  </div>
+
+</div>
+
+
+<script>
+
+let selectedFile = null;
+let selectedFormat = "16:9";
+let captionsEnabled = false;
+let outputURL = null;
+
+
+/* VIDEO UPLOAD */
+
+const videoInput = document.getElementById("videoInput");
+
+videoInput.addEventListener("change", function () {
+
+  selectedFile = this.files[0];
+
+  if (!selectedFile) return;
+
+  document.getElementById("fileName").textContent =
+    selectedFile.name + " · " +
+    (selectedFile.size / 1024 / 1024).toFixed(1) +
+    " MB";
+
+  document.getElementById("processButton").disabled = false;
+
+});
+
+
+/* FORMAT */
+
+document.querySelectorAll(".format").forEach(function (item) {
+
+  item.addEventListener("click", function () {
+
+    document.querySelectorAll(".format")
+      .forEach(x => x.classList.remove("selected"));
+
+    this.classList.add("selected");
+
+    selectedFormat = this.dataset.ratio;
+
+  });
+
+});
+
+
+/* CAPTIONS */
+
+document.getElementById("captionSwitch")
+  .addEventListener("click", function () {
+
+    captionsEnabled = !captionsEnabled;
+
+    this.classList.toggle("on");
+
+  });
+
+
+/* PROCESS */
+
+document.getElementById("processButton")
+  .addEventListener("click", function () {
+
+    if (!selectedFile) return;
+
+    const status = document.getElementById("status");
+    const statusText = document.getElementById("statusText");
+    const progressBar = document.getElementById("progressBar");
+
+    status.style.display = "block";
+
+    this.disabled = true;
+
+    let progress = 0;
+
+    const stages = [
+      "Uploading...",
+      "Preparing video...",
+      "Preparing audio...",
+      "Rendering...",
+      "Complete"
+    ];
+
+    let stage = 0;
+
+    const timer = setInterval(function () {
+
+      progress += 20;
+
+      progressBar.style.width = progress + "%";
+
+      statusText.textContent =
+        stages[Math.min(stage, stages.length - 1)];
+
+      stage++;
+
+      if (progress >= 100) {
+
+        clearInterval(timer);
+
+        /*
+          TEST MODE:
+
+          For now we use the original uploaded video
+          as the output file.
+
+          This verifies that the browser can:
+          upload → create output → preview → download.
+
+          FFmpeg + AI processing will replace this section
+          in the next stage.
+        */
+
+        if (outputURL) {
+          URL.revokeObjectURL(outputURL);
+        }
+
+        outputURL = URL.createObjectURL(selectedFile);
+
+        const preview =
+          document.getElementById("videoPreview");
+
+        preview.src = outputURL;
+
+        preview.load();
+
+        const download =
+          document.getElementById("downloadButton");
+
+        const title =
+          document.getElementById("titleInput").value.trim()
+          || "CleanVoice";
+
+        download.href = outputURL;
+
+        download.download =
+          title.replace(/[^a-z0-9_\- ]/gi, "")
+          + "_CleanVoice.mp4";
+
+        document.getElementById("previewArea")
+          .style.display = "block";
+
+        statusText.textContent =
+          "Your video is ready";
+
+        document.getElementById("processButton")
+          .disabled = false;
+
+      }
+
+    }, 400);
+
+  });
+
+</script>
+
+</body>
+  </html>
