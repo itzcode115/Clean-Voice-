@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>CleanVoice</title>
 
 <style>
@@ -167,6 +168,35 @@ input[type="text"] {
   left: 27px;
 }
 
+.noise-box {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.noise-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.noise {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 13px 5px;
+  text-align: center;
+  background: white;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.noise.selected {
+  background: #111;
+  color: white;
+  border-color: #111;
+}
+
 button {
   width: 100%;
   border: none;
@@ -219,7 +249,7 @@ video {
   height: 100%;
   width: 0%;
   background: #111;
-  transition: width .3s;
+  transition: width .2s;
 }
 
 .download {
@@ -246,6 +276,13 @@ video {
   color: #777;
   line-height: 1.5;
 }
+
+.error {
+  color: #b00020;
+  margin-top: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 </style>
 </head>
 
@@ -258,10 +295,11 @@ video {
   <h1>CleanVoice</h1>
 
   <div class="subtitle">
-    Clean your voice. Choose your format. Get your finished video.
+    Clean your voice. Reduce background noise. Get your finished video.
   </div>
 
   <!-- UPLOAD -->
+
   <div class="section">
 
     <span class="label">1 · UPLOAD VIDEO</span>
@@ -288,6 +326,7 @@ video {
 
 
   <!-- TITLE -->
+
   <div class="section">
 
     <span class="label">2 · VIDEO TITLE</span>
@@ -302,6 +341,7 @@ video {
 
 
   <!-- FORMAT -->
+
   <div class="section">
 
     <span class="label">3 · OUTPUT FORMAT</span>
@@ -343,16 +383,46 @@ video {
   </div>
 
 
-  <!-- CAPTIONS -->
+  <!-- NOISE REDUCTION -->
+
   <div class="section">
 
-    <span class="label">4 · CAPTIONS</span>
+    <span class="label">4 · VOICE CLEANUP</span>
+
+    <div class="noise-box">
+
+      <div class="noise-buttons">
+
+        <div class="noise" data-level="off">
+          Off
+        </div>
+
+        <div class="noise selected" data-level="medium">
+          Medium
+        </div>
+
+        <div class="noise" data-level="strong">
+          Strong
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- CAPTIONS -->
+
+  <div class="section">
+
+    <span class="label">5 · CAPTIONS</span>
 
     <div class="caption-box">
 
       <div>
         <b>Captions</b><br>
-        <small>Auto-generated subtitles</small>
+        <small>Optional — not processed yet</small>
       </div>
 
       <div id="captionSwitch" class="switch"></div>
@@ -363,12 +433,18 @@ video {
 
 
   <!-- PROCESS -->
-  <button id="processButton" class="process" disabled>
-    ✨ Process Video
+
+  <button
+    id="processButton"
+    class="process"
+    disabled
+  >
+    ✨ Remove Noise & Process Video
   </button>
 
 
   <!-- STATUS -->
+
   <div id="status" class="status">
 
     <b id="statusText">Preparing...</b>
@@ -377,28 +453,34 @@ video {
       <div id="progressBar" class="progress-bar"></div>
     </div>
 
+    <div id="error" class="error"></div>
+
   </div>
 
 
   <!-- PREVIEW -->
+
   <div id="previewArea">
 
     <h2>Finished video</h2>
 
-    <video id="videoPreview" controls playsinline></video>
+    <video
+      id="videoPreview"
+      controls
+      playsinline
+    ></video>
 
     <a
       id="downloadButton"
       class="download"
       download
     >
-      ↓ Download video
+      ↓ Download cleaned video
     </a>
 
     <div class="note">
-      Prototype test: this version verifies the upload,
-      preview and download pipeline. AI voice enhancement,
-      captions and actual ratio rendering will be added next.
+      Background-noise reduction is performed locally in your browser.
+      Your video is not uploaded to a separate AI server by this page.
     </div>
 
   </div>
@@ -406,161 +488,612 @@ video {
 </div>
 
 
-<script>
+<script type="module">
+
+/*
+=========================================================
+ CLEANVOICE REAL AUDIO PROCESSING
+ Uses FFmpeg.wasm + FFmpeg afftdn
+=========================================================
+*/
+
+import {
+  FFmpeg
+} from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
+
+import {
+  fetchFile,
+  toBlobURL
+} from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
+
+
+/* ------------------------------------------------------
+   VARIABLES
+------------------------------------------------------ */
 
 let selectedFile = null;
 let selectedFormat = "16:9";
 let captionsEnabled = false;
+let noiseLevel = "medium";
+
 let outputURL = null;
 
-
-/* VIDEO UPLOAD */
-
-const videoInput = document.getElementById("videoInput");
-
-videoInput.addEventListener("change", function () {
-
-  selectedFile = this.files[0];
-
-  if (!selectedFile) return;
-
-  document.getElementById("fileName").textContent =
-    selectedFile.name + " · " +
-    (selectedFile.size / 1024 / 1024).toFixed(1) +
-    " MB";
-
-  document.getElementById("processButton").disabled = false;
-
-});
+let ffmpeg = null;
+let ffmpegLoaded = false;
 
 
-/* FORMAT */
+/* ------------------------------------------------------
+   ELEMENTS
+------------------------------------------------------ */
 
-document.querySelectorAll(".format").forEach(function (item) {
+const videoInput =
+  document.getElementById("videoInput");
 
-  item.addEventListener("click", function () {
+const processButton =
+  document.getElementById("processButton");
 
-    document.querySelectorAll(".format")
-      .forEach(x => x.classList.remove("selected"));
+const status =
+  document.getElementById("status");
 
-    this.classList.add("selected");
+const statusText =
+  document.getElementById("statusText");
 
-    selectedFormat = this.dataset.ratio;
+const progressBar =
+  document.getElementById("progressBar");
+
+const errorBox =
+  document.getElementById("error");
+
+const previewArea =
+  document.getElementById("previewArea");
+
+const videoPreview =
+  document.getElementById("videoPreview");
+
+const downloadButton =
+  document.getElementById("downloadButton");
+
+
+/* ------------------------------------------------------
+   LOAD FFMPEG
+------------------------------------------------------ */
+
+async function loadFFmpeg() {
+
+  if (ffmpegLoaded) {
+    return;
+  }
+
+  status.style.display = "block";
+
+  statusText.textContent =
+    "Loading video processing engine...";
+
+  progressBar.style.width = "5%";
+
+  ffmpeg = new FFmpeg();
+
+
+  ffmpeg.on(
+    "progress",
+    ({ progress }) => {
+
+      const percent =
+        Math.round(progress * 90);
+
+      progressBar.style.width =
+        Math.max(5, percent) + "%";
+
+    }
+  );
+
+
+  ffmpeg.on(
+    "log",
+    ({ message }) => {
+
+      console.log(
+        "[FFmpeg]",
+        message
+      );
+
+    }
+  );
+
+
+  /*
+    Single-thread FFmpeg core.
+    Using toBlobURL helps avoid cross-origin
+    worker loading problems in browsers.
+  */
+
+  const baseURL =
+    "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
+
+
+  await ffmpeg.load({
+
+    coreURL:
+      await toBlobURL(
+        `${baseURL}/ffmpeg-core.js`,
+        "text/javascript"
+      ),
+
+    wasmURL:
+      await toBlobURL(
+        `${baseURL}/ffmpeg-core.wasm`,
+        "application/wasm"
+      )
 
   });
 
-});
+
+  ffmpegLoaded = true;
+
+  progressBar.style.width = "10%";
+
+}
 
 
-/* CAPTIONS */
+/* ------------------------------------------------------
+   VIDEO UPLOAD
+------------------------------------------------------ */
 
-document.getElementById("captionSwitch")
-  .addEventListener("click", function () {
+videoInput.addEventListener(
+  "change",
+  function () {
 
-    captionsEnabled = !captionsEnabled;
+    selectedFile =
+      this.files[0];
 
-    this.classList.toggle("on");
+    if (!selectedFile) {
+      return;
+    }
+
+    document.getElementById(
+      "fileName"
+    ).textContent =
+      selectedFile.name +
+      " · " +
+      (
+        selectedFile.size /
+        1024 /
+        1024
+      ).toFixed(1) +
+      " MB";
+
+    processButton.disabled =
+      false;
+
+    previewArea.style.display =
+      "none";
+
+  }
+);
+
+
+/* ------------------------------------------------------
+   FORMAT
+------------------------------------------------------ */
+
+document
+  .querySelectorAll(".format")
+  .forEach(function (item) {
+
+    item.addEventListener(
+      "click",
+      function () {
+
+        document
+          .querySelectorAll(".format")
+          .forEach(
+            x =>
+              x.classList.remove(
+                "selected"
+              )
+          );
+
+        this.classList.add(
+          "selected"
+        );
+
+        selectedFormat =
+          this.dataset.ratio;
+
+      }
+    );
 
   });
 
 
-/* PROCESS */
+/* ------------------------------------------------------
+   NOISE LEVEL
+------------------------------------------------------ */
 
-document.getElementById("processButton")
-  .addEventListener("click", function () {
+document
+  .querySelectorAll(".noise")
+  .forEach(function (item) {
 
-    if (!selectedFile) return;
+    item.addEventListener(
+      "click",
+      function () {
 
-    const status = document.getElementById("status");
-    const statusText = document.getElementById("statusText");
-    const progressBar = document.getElementById("progressBar");
+        document
+          .querySelectorAll(".noise")
+          .forEach(
+            x =>
+              x.classList.remove(
+                "selected"
+              )
+          );
 
-    status.style.display = "block";
+        this.classList.add(
+          "selected"
+        );
 
-    this.disabled = true;
+        noiseLevel =
+          this.dataset.level;
 
-    let progress = 0;
+      }
+    );
 
-    const stages = [
-      "Uploading...",
-      "Preparing video...",
-      "Preparing audio...",
-      "Rendering...",
-      "Complete"
-    ];
+  });
 
-    let stage = 0;
 
-    const timer = setInterval(function () {
+/* ------------------------------------------------------
+   CAPTIONS
+------------------------------------------------------ */
 
-      progress += 20;
+document
+  .getElementById("captionSwitch")
+  .addEventListener(
+    "click",
+    function () {
 
-      progressBar.style.width = progress + "%";
+      captionsEnabled =
+        !captionsEnabled;
+
+      this.classList.toggle(
+        "on"
+      );
+
+    }
+  );
+
+
+/* ------------------------------------------------------
+   NOISE FILTER
+------------------------------------------------------ */
+
+function getNoiseFilter() {
+
+  /*
+    afftdn is FFmpeg's FFT-based
+    audio denoising filter.
+
+    Higher nf values produce stronger
+    noise reduction.
+  */
+
+  if (noiseLevel === "off") {
+
+    return null;
+
+  }
+
+  if (noiseLevel === "strong") {
+
+    return "afftdn=nf=-28";
+
+  }
+
+  return "afftdn=nf=-22";
+
+}
+
+
+/* ------------------------------------------------------
+   PROCESS VIDEO
+------------------------------------------------------ */
+
+processButton.addEventListener(
+  "click",
+  async function () {
+
+    if (!selectedFile) {
+      return;
+    }
+
+
+    processButton.disabled =
+      true;
+
+    status.style.display =
+      "block";
+
+    errorBox.textContent =
+      "";
+
+    progressBar.style.width =
+      "2%";
+
+
+    try {
+
+      /* ---------------------------------------------
+         LOAD ENGINE
+      --------------------------------------------- */
+
+      await loadFFmpeg();
+
 
       statusText.textContent =
-        stages[Math.min(stage, stages.length - 1)];
+        "Preparing your video...";
 
-      stage++;
+      progressBar.style.width =
+        "12%";
 
-      if (progress >= 100) {
 
-        clearInterval(timer);
+      /* ---------------------------------------------
+         FILE NAMES
+      --------------------------------------------- */
 
-        /*
-          TEST MODE:
+      const inputName =
+        "input_video";
 
-          For now we use the original uploaded video
-          as the output file.
+      const outputName =
+        "cleanvoice_output.mp4";
 
-          This verifies that the browser can:
-          upload → create output → preview → download.
 
-          FFmpeg + AI processing will replace this section
-          in the next stage.
-        */
+      /* ---------------------------------------------
+         WRITE VIDEO INTO FFMPEG
+      --------------------------------------------- */
 
-        if (outputURL) {
-          URL.revokeObjectURL(outputURL);
-        }
+      await ffmpeg.writeFile(
+        inputName,
+        await fetchFile(
+          selectedFile
+        )
+      );
 
-        outputURL = URL.createObjectURL(selectedFile);
 
-        const preview =
-          document.getElementById("videoPreview");
+      statusText.textContent =
+        "Extracting and cleaning audio...";
 
-        preview.src = outputURL;
+      progressBar.style.width =
+        "20%";
 
-        preview.load();
 
-        const download =
-          document.getElementById("downloadButton");
+      /* ---------------------------------------------
+         BUILD FFMPEG COMMAND
+      --------------------------------------------- */
 
-        const title =
-          document.getElementById("titleInput").value.trim()
-          || "CleanVoice";
+      const filter =
+        getNoiseFilter();
 
-        download.href = outputURL;
 
-        download.download =
-          title.replace(/[^a-z0-9_\- ]/gi, "")
-          + "_CleanVoice.mp4";
+      let command = [
+        "-i",
+        inputName
+      ];
 
-        document.getElementById("previewArea")
-          .style.display = "block";
 
-        statusText.textContent =
-          "Your video is ready";
+      /*
+        Keep original video stream.
 
-        document.getElementById("processButton")
-          .disabled = false;
+        Process only the audio.
+      */
+
+      if (filter) {
+
+        command.push(
+          "-af",
+          filter
+        );
 
       }
 
-    }, 400);
 
-  });
+      command.push(
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        "-shortest",
+        outputName
+      );
+
+
+      statusText.textContent =
+        "Removing background noise...";
+
+
+      /* ---------------------------------------------
+         ACTUAL PROCESSING
+      --------------------------------------------- */
+
+      await ffmpeg.exec(
+        command
+      );
+
+
+      statusText.textContent =
+        "Creating finished video...";
+
+      progressBar.style.width =
+        "92%";
+
+
+      /* ---------------------------------------------
+         READ OUTPUT
+      --------------------------------------------- */
+
+      const data =
+        await ffmpeg.readFile(
+          outputName
+        );
+
+
+      if (!data || data.length === 0) {
+
+        throw new Error(
+          "FFmpeg created an empty output file."
+        );
+
+      }
+
+
+      /* ---------------------------------------------
+         CREATE DOWNLOAD FILE
+      --------------------------------------------- */
+
+      if (outputURL) {
+
+        URL.revokeObjectURL(
+          outputURL
+        );
+
+      }
+
+
+      const blob =
+        new Blob(
+          [data.buffer],
+          {
+            type: "video/mp4"
+          }
+        );
+
+
+      outputURL =
+        URL.createObjectURL(
+          blob
+        );
+
+
+      /* ---------------------------------------------
+         PREVIEW
+      --------------------------------------------- */
+
+      videoPreview.src =
+        outputURL;
+
+      videoPreview.load();
+
+
+      /* ---------------------------------------------
+         DOWNLOAD
+      --------------------------------------------- */
+
+      const title =
+        document
+          .getElementById(
+            "titleInput"
+          )
+          .value
+          .trim()
+        || "CleanVoice";
+
+
+      const safeTitle =
+        title
+          .replace(
+            /[^a-z0-9_\- ]/gi,
+            ""
+          )
+          .trim()
+        || "CleanVoice";
+
+
+      downloadButton.href =
+        outputURL;
+
+      downloadButton.download =
+        safeTitle +
+        "_CleanVoice.mp4";
+
+
+      /* ---------------------------------------------
+         FINISHED
+      --------------------------------------------- */
+
+      progressBar.style.width =
+        "100%";
+
+      statusText.textContent =
+        "Your cleaned video is ready ✓";
+
+
+      previewArea.style.display =
+        "block";
+
+
+      /*
+        Free memory inside FFmpeg.
+      */
+
+      try {
+
+        await ffmpeg.deleteFile(
+          inputName
+        );
+
+        await ffmpeg.deleteFile(
+          outputName
+        );
+
+      } catch (cleanupError) {
+
+        console.log(
+          "Cleanup:",
+          cleanupError
+        );
+
+      }
+
+
+    } catch (error) {
+
+      console.error(
+        error
+      );
+
+
+      statusText.textContent =
+        "Processing failed";
+
+
+      errorBox.textContent =
+        "Error: " +
+        (
+          error.message ||
+          String(error)
+        );
+
+
+      progressBar.style.width =
+        "0%";
+
+
+    } finally {
+
+      processButton.disabled =
+        false;
+
+    }
+
+  }
+);
 
 </script>
 
 </body>
-  </html>
+</html>
